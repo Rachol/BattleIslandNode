@@ -14,7 +14,7 @@
     shot: boolean,
     shootDelay: number,
     token: string,
-    call_count: number
+    callCount: number
     }
   */
 var robots = [];
@@ -39,6 +39,35 @@ var CALL_COUNT = 5
 //////////////////////
 /////  UTILITY  //////
 //////////////////////
+
+
+
+function GetDrawData() {
+    var drawData = {
+        robots: [],
+        healthItems: []
+    }
+    for(var i = 0; i < robots.length; i++){
+        drawData.robots[i] = {
+            x: Math.floor(robots[i].x),
+            y: Math.floor(robots[i].y),
+            rotation: Math.floor(robots[i].rotation),
+            hp: Math.floor(robots[i].hp),
+            shooting: robots[i].shootDelay >= 14 // TODO
+        }
+    }
+
+    for(var i = 0; i < healthItems.length; i++){
+        drawData.healthItems[i] = {
+            x: Math.floor(healthItems[i].x),
+            y: Math.floor(healthItems[i].y)
+        }
+    }
+
+
+    return drawData;
+}
+
 function getRobot(token){
     for(var i=0; i<robots.length; i++){
         if(token===robots[i].token){
@@ -103,12 +132,12 @@ function getDistToEdgeInViewArea(robot, searchWidth, searchRadius){
 
     var i1 = findInter(robotCenter,
                        islandCenter,
-                       robot.rotation-90-searchWidth/2,
+                       robot.rotation-searchWidth/2,
                        searchRadius)
 
     var i2 = findInter(robotCenter,
                        islandCenter,
-                       robot.rotation-90+searchWidth/2,
+                       robot.rotation+searchWidth/2,
                        searchRadius)
 
     //get the angle to closest point on the shore of the island
@@ -139,7 +168,11 @@ function getDistToEdgeInViewArea(robot, searchWidth, searchRadius){
         }
 
         if(d1 > 0 || d2 > 0){
-            return Math.max(d1, d2)
+            var dist = Math.min(d1, d2);
+            if(dist <= 0){
+                dist = Math.max(d1, d2);
+            }
+            return dist;
         }
     }
 
@@ -236,7 +269,7 @@ function addRobot( scriptObject ) {
         damageTaken: 0,
         shootDelay: 0,
         token: "some random string" + robots.length,
-        call_count: 0
+        callCount: 0
     };
 
 
@@ -284,7 +317,7 @@ function play() {
         for(var i = 0; i < robots.length; ++i){
             try {
                 if(robots[i].hp > 0){
-                    robots[i].call_count = CALL_COUNT;
+                    robots[i].callCount = CALL_COUNT;
                     robots[i].script.executeEvents();
                 }
             } catch (err) {

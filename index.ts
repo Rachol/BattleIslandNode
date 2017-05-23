@@ -3,6 +3,7 @@ import allFilesAreJsOrDts = ts.server.allFilesAreJsOrDts;
 const safeEval = require('safe-eval')
 const path = require('path');
 const fs = require('fs');
+var zlib = require('zlib');
 var sqlite3 = require('sqlite3').verbose();
 const DB_PATH = "E:/Programming/BattleIsland/storage/Databases/96529230ba69f6ed1ef0770a494441cd.sqlite"
 
@@ -11,6 +12,17 @@ const CONVERTED_DIR_PATH = path.join(DIR, "");
 
 const ROBOT_API = './RobotAPI.js';
 const ROBOT_TEMPLATE = fs.readFileSync(ROBOT_API, 'utf8')
+
+const commandLineArgs = require('command-line-args')
+
+const optionDefinitions = [
+    { name: 'src', type: String, defaultValue: "E:/Programming/MEAN/wozzweglem/server-src/uploads" },
+    { name: 'number', alias: 'n', type: Number, defaultValue: -1 },
+    { name: 'logData', alias: 'd', type: Boolean , defaultValue: false },
+    { name: 'logCompress', alias: 'c', type: Boolean , defaultValue: false }
+]
+
+const options = commandLineArgs(optionDefinitions);
 
 var walk = function(dir) {
     var results = [];
@@ -29,12 +41,14 @@ var walk = function(dir) {
 };
 
 //randomize 4 files from the list
-function getRandomEntries(list, number) {
+function getRandomEntries(list, number, unique) {
     var results = []
     if(list.length !== 0){
-           while(results.length < number){
-               results.push(list[Math.floor(Math.random()*list.length)]);
-           }
+        while (results.length < number) {
+            let fileName = list[Math.floor(Math.random() * list.length)]
+            if(!unique || results.indexOf(fileName) === -1 || list.length <= results.length)
+                results.push(fileName);
+        }
     }
     return results;
 }
@@ -85,7 +99,8 @@ function getGame(){
             return {
                  play: play,
                  addRobot: addRobot,
-                 initialize: initialize
+                 initialize: initialize,
+                 GetDrawData: GetDrawData
             }
         `;
     return evaluate(functionContent);
@@ -148,16 +163,25 @@ function writeToDB(winner, files) {
     });
 }
 
-function playOneGame(players){
+function playOneGame(players, unique){
     let allFiles = walk(DIR);
-    let selectedFiles = getRandomEntries(allFiles, players);
+    let selectedFiles = getRandomEntries(allFiles, players, unique);
     let scripts = loadSelectedFiles(selectedFiles);
 
+    //console.log(selectedFiles);
+
     resetGame(game, scripts);
+    replayData = [];
+    if(options.logData){
+        replayData.push(game.GetDrawData())
+    }
 
     let frameNumber = 1;
     let winnerIndex = game.play();
     while(typeof winnerIndex === 'undefined' && frameNumber < 10000) {
+        if(options.logData){
+            replayData.push(game.GetDrawData())
+        }
         frameNumber++;
         winnerIndex = game.play();
     }
@@ -169,6 +193,34 @@ function playOneGame(players){
     } else {
         // console.log("A draw!")
     }
+
+    if(options.logData){
+        var logOutputData = {
+            islandRadius: 375,
+            healthItemWidth: 15,
+            robotWidth: 40,
+            names: [],
+            frames: replayData
+        }
+
+        for(var i=0; i < selectedFiles.length; i++){
+            logOutputData.names[i] = selectedFiles[i].replace(CONVERTED_DIR_PATH + "\\", "");
+        }
+
+        var logOutput = JSON.stringify(logOutputData, null, 4) ;
+        if(options.logCompress) {
+            logOutput = zlib.deflateSync(JSON.stringify(logOutput, null, 4)).toString('base64');
+        }
+        //logData = zlib.inflateSync(new Buffer(logData, 'base64')).toString();
+        fs.writeFile(".\\replayData.json", logOutput, function(err) {
+            if(err) {
+                return console.log(err);
+            }
+
+            console.log("The file was saved!");
+        });
+    }
+
     console.log("Game", gameNumber, "ended at", frameNumber);
 }
 
@@ -177,39 +229,46 @@ var dbCounter = 0;
 let gameNumber = 0;
 let game = getGame();
 
-var lastTime = 0;
+var lastTime = Date.now();
+var onlyUniquePlayers = true;
+
+var simualtionsLeft = options.number;
+
+var replayData = [];
 
 function main() {
     if(dbCounter === 0)
     //for(let i=0; i<10; i++)
     {
+        if(simualtionsLeft > 0 ){
+            simualtionsLeft--;
+        }
         //cleanup
         global.gc();
 
-        // let curTime = Date.now();
-        // if(lastTime != 0){
-        //     console.log("execution time:",curTime - lastTime, "ms");
-        // }
-        //
-        // lastTime = curTime;
         try{
             gameNumber++;
-            playOneGame(4);
+            playOneGame(4, onlyUniquePlayers);
         }catch(err){
             console.log(err);
             dbCounter = 0;
         }
 
-
+        // let curTime = Date.now();
+        // if(lastTime != 0){
+        //     console.log("execution time:",curTime - lastTime, "ms");
+        // }
+        // lastTime = curTime;
     }
-    setImmediate(function immediate () {
-        main()
-    });
+    if(simualtionsLeft == 0) {
+        return
+    }else{
+        //add command line input for breaking out of the loop
+        setImmediate(function immediate () {
+            main()
+        });
+    }
 }
 
 initDB();
 main();
-
-console.log("Finished?")
-
-
