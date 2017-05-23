@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "tsc index.ts && node --expose-gc index.js -n 1 -d"
+    "start": "tsc index.ts && node --expose-gc index.js -d -p -i --src ../uploads/tournament1/Arvi.js ../uploads/tournament1/Kåre.js ../uploads/tournament1/Masoom.js ../uploads/tournament1/Javi.js"
   },
   "author": "",
   "license": "ISC",

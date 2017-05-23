@@ -8,30 +8,33 @@ var sqlite3 = require('sqlite3').verbose();
 const commandLineArgs = require('command-line-args')
 
 const optionDefinitions = [
-    { name: 'src', type: String, defaultValue: "../uploads" },
+    { name: 'src', type: String, multiple: true, defaultValue: ["../uploads"] },
     { name: 'database', type: String, defaultValue: "../database/results.db" },
     { name: 'number', alias: 'n', type: Number, defaultValue: -1 },
     { name: 'logData', alias: 'd', type: Boolean , defaultValue: false },
-    { name: 'logCompress', alias: 'c', type: Boolean , defaultValue: false }
+    { name: 'logCompress', alias: 'c', type: Boolean , defaultValue: false },
+    { name: 'printReply', alias: 'p', type: Boolean , defaultValue: false },
+    { name: 'ignoreDB', alias: 'i', type: Boolean , defaultValue: true },
 ]
 
 const options = commandLineArgs(optionDefinitions);
 
 const DB_PATH = options.database;
 
-const DIR = options.src;
-const CONVERTED_DIR_PATH = path.join(DIR, "");
+const SCRIPTS_PATH_LIST = options.src;
+
+// const CONVERTED_DIR_PATH = path.join(SCRIPTS_PATH_LIST, "");
 
 const ROBOT_API = './RobotAPI.js';
 const ROBOT_TEMPLATE = fs.readFileSync(ROBOT_API, 'utf8')
 
-var walk = function(dir) {
+function walkDir(dir) {
     var results = [];
     var files = fs.readdirSync(dir);
     for(var i=0; i<files.length; ++i){
         var absoluteFilePath = path.join(dir, files[i]);
         if(fs.lstatSync(absoluteFilePath).isDirectory()){
-            results = results.concat(walk(absoluteFilePath));
+            results = results.concat(walkDir(absoluteFilePath));
         }else{
             if(absoluteFilePath.endsWith(".js")){
                 results.push(absoluteFilePath);
@@ -41,14 +44,29 @@ var walk = function(dir) {
     return results;
 };
 
+function walk(scriptsPath) {
+    var results = [];
+
+    var absoluteFilePath = path.join(scriptsPath, "");
+    if(fs.lstatSync(absoluteFilePath).isDirectory()){
+        results = results.concat(walkDir(absoluteFilePath));
+    }else{
+        if(absoluteFilePath.endsWith(".js")){
+            results.push(absoluteFilePath);
+        }
+    }
+
+    return results;
+};
+
 //randomize 4 files from the list
 function getRandomEntries(list, number, unique) {
     var results = []
     if(list.length !== 0){
         while (results.length < number) {
-            let fileName = list[Math.floor(Math.random() * list.length)]
-            if(!unique || results.indexOf(fileName) === -1 || list.length <= results.length)
-                results.push(fileName);
+            let file = list[Math.floor(Math.random() * list.length)]
+            if(!unique || results.indexOf(file) === -1 || list.length <= results.length)
+                results.push(file);
         }
     }
     return results;
@@ -58,7 +76,7 @@ function loadSelectedFiles(files) {
     var results = []
 
     for (var i = 0; i < files.length; i++) {
-        var fileContent = fs.readFileSync(files[i], 'utf8')
+        var fileContent = fs.readFileSync(files[i].file, 'utf8')
         //how am I going to load these...
         var functionContent = ROBOT_TEMPLATE + fileContent +
         `
@@ -115,13 +133,13 @@ function initDB(){
     db.close();
 }
 
-function writeToDB(winner, files) {
+function writeToDB(winnerIndex, files) {
     var db = new sqlite3.Database(DB_PATH);
     db.serialize(function() {
-        var winnerScript = winner.replace(CONVERTED_DIR_PATH + "\\", "");
+        var winnerScript = files[winnerIndex].file.replace(files[winnerIndex].originFolder + "\\", "");
         var uniqueNames = []
         for (var i = 0; i < files.length; ++i) {
-            var name = files[i].replace(CONVERTED_DIR_PATH + "\\", "");
+            var name = files[i].file.replace(files[i].originFolder + "\\", "");
             if (uniqueNames.indexOf(name) == -1) {
                 uniqueNames.push(name)
             }
@@ -139,7 +157,7 @@ function writeToDB(winner, files) {
                 // console.log(err, rows);
 
                 if(err) {console.log(err); return}
-                var games = 0;
+                var games = 1;
                 var wins = 0;
                 if (rows.length === 1) {
                     games = rows[0].games + 1
@@ -165,7 +183,20 @@ function writeToDB(winner, files) {
 }
 
 function playOneGame(players, unique){
-    let allFiles = walk(DIR);
+    let allFiles = [];
+    for(let i=0; i<options.src.length; ++i){
+        let originFolder = path.join(options.src[i], "");
+        let files = walk(originFolder);
+        for(let j=0; j<files.length; j++){
+            allFiles.push({
+                originFolder: originFolder,
+                file: files[j]
+            });
+        }
+    }
+
+    console.log(allFiles);
+
     let selectedFiles = getRandomEntries(allFiles, players, unique);
     let scripts = loadSelectedFiles(selectedFiles);
 
@@ -187,9 +218,11 @@ function playOneGame(players, unique){
         winnerIndex = game.play();
     }
     if(winnerIndex >= 0 && winnerIndex < scripts.length){
-        var winnerName = selectedFiles[winnerIndex].replace(CONVERTED_DIR_PATH + "\\", "");
+        var winnerName = selectedFiles[winnerIndex].file.replace(selectedFiles[winnerIndex].originFolder + "\\", "");
 
-        writeToDB(selectedFiles[winnerIndex], selectedFiles);
+        if(!options.ignoreDB){
+            writeToDB(winnerIndex, selectedFiles);
+        }
         // console.log("Winner:", winnerName);
     } else {
         // console.log("A draw!")
@@ -205,7 +238,7 @@ function playOneGame(players, unique){
         }
 
         for(var i=0; i < selectedFiles.length; i++){
-            logOutputData.names[i] = selectedFiles[i].replace(CONVERTED_DIR_PATH + "\\", "");
+            logOutputData.names[i] = selectedFiles[i].file.replace(selectedFiles[i].originFolder + "\\", "");
         }
 
         var logOutput = JSON.stringify(logOutputData, null, 4) ;
@@ -218,11 +251,16 @@ function playOneGame(players, unique){
                 return console.log(err);
             }
 
-            console.log("The file was saved!");
+            //console.log("The file was saved!");
         });
+        if(options.printReply){
+            console.log(logOutput);
+        }
     }
 
-    console.log("Game", gameNumber, "ended at", frameNumber);
+    if(!options.printReply){
+        console.log("Game", gameNumber, "ended at", frameNumber);
+    }
 }
 
 var dbCounter = 0;
@@ -261,7 +299,7 @@ function main() {
         // }
         // lastTime = curTime;
     }
-    if(simualtionsLeft == 0) {
+    if(simualtionsLeft == 0 || options.printReply) {
         return
     }else{
         //add command line input for breaking out of the loop
