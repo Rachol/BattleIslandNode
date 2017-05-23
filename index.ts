@@ -5,24 +5,25 @@ const path = require('path');
 const fs = require('fs');
 var zlib = require('zlib');
 var sqlite3 = require('sqlite3').verbose();
-const DB_PATH = "E:/Programming/BattleIsland/storage/Databases/96529230ba69f6ed1ef0770a494441cd.sqlite"
-
-const DIR = 'E:/Programming/MEAN/wozzweglem/server-src/uploads';
-const CONVERTED_DIR_PATH = path.join(DIR, "");
-
-const ROBOT_API = './RobotAPI.js';
-const ROBOT_TEMPLATE = fs.readFileSync(ROBOT_API, 'utf8')
-
 const commandLineArgs = require('command-line-args')
 
 const optionDefinitions = [
-    { name: 'src', type: String, defaultValue: "E:/Programming/MEAN/wozzweglem/server-src/uploads" },
+    { name: 'src', type: String, defaultValue: "../uploads" },
+    { name: 'database', type: String, defaultValue: "../database/results.db" },
     { name: 'number', alias: 'n', type: Number, defaultValue: -1 },
     { name: 'logData', alias: 'd', type: Boolean , defaultValue: false },
     { name: 'logCompress', alias: 'c', type: Boolean , defaultValue: false }
 ]
 
 const options = commandLineArgs(optionDefinitions);
+
+const DB_PATH = options.database;
+
+const DIR = options.src;
+const CONVERTED_DIR_PATH = path.join(DIR, "");
+
+const ROBOT_API = './RobotAPI.js';
+const ROBOT_TEMPLATE = fs.readFileSync(ROBOT_API, 'utf8')
 
 var walk = function(dir) {
     var results = [];
